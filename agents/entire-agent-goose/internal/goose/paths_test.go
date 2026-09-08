@@ -44,8 +44,9 @@ func TestResolveSessionFileEmptyFallback(t *testing.T) {
 }
 
 func TestTranscriptPathRefusesPathTraversal(t *testing.T) {
-	t.Setenv("GOOSE_PATH_ROOT", t.TempDir())
-	wantDir := filepath.Join(t.TempDir(), "data", "sessions")
+	root := t.TempDir()
+	t.Setenv("GOOSE_PATH_ROOT", root)
+	wantDir := filepath.Join(root, "data", "sessions")
 	for _, id := range []string{
 		"../etc/passwd",
 		"subdir/../../etc/passwd",
@@ -63,8 +64,9 @@ func TestTranscriptPathRefusesPathTraversal(t *testing.T) {
 }
 
 func TestTranscriptPathEmptyFallback(t *testing.T) {
-	t.Setenv("GOOSE_PATH_ROOT", t.TempDir())
-	wantDir := filepath.Join(t.TempDir(), "data", "sessions")
+	root := t.TempDir()
+	t.Setenv("GOOSE_PATH_ROOT", root)
+	wantDir := filepath.Join(root, "data", "sessions")
 	if got := transcriptPath(""); got != filepath.Join(wantDir, "unknown.json") {
 		t.Fatalf("transcriptPath(empty) = %q, want %q", got, filepath.Join(wantDir, "unknown.json"))
 	}
