@@ -231,26 +231,39 @@ func (a *Agent) InstallHooks(localDev bool, force bool) (int, error) {
 	content := strings.ReplaceAll(generatePlugin(), entireCmdPlaceholder, cmdPrefix)
 
 	path := filepath.Join(root, pluginFile)
-	if existing, readErr := os.ReadFile(path); readErr == nil {
-		if string(existing) == content {
-			return 0, nil
+	if info, lstatErr := os.Lstat(path); lstatErr == nil {
+		// Never follow an existing symlink or overwrite a non-regular path. A
+		// forced install replaces the directory entry atomically rather than
+		// writing through it.
+		if !info.Mode().IsRegular() {
+			if !force {
+				return 0, fmt.Errorf("refusing to overwrite non-regular kilo plugin %s; pass force to replace it", path)
+			}
+		} else if existing, readErr := os.ReadFile(path); readErr == nil {
+			// Force is intentionally allowed to rewrite identical content so it
+			// can repair file metadata such as permissions.
+			if string(existing) == content && !force {
+				return 0, nil
+			}
+			// Protect user-owned or third-party Kilo plugins from being silently
+			// overwritten by the generated Entire plugin. Only an explicit force
+			// install may replace a foreign plugin file, matching the ownership
+			// contract used by the omp adapter.
+			if !isOwnedPlugin(existing) && !force {
+				return 0, fmt.Errorf("refusing to overwrite foreign kilo plugin %s; pass force to replace it", path)
+			}
+		} else if !force {
+			return 0, readErr
 		}
-		// Protect user-owned or third-party Kilo plugins from being silently
-		// overwritten by the generated Entire plugin. Only an explicit force
-		// install may replace a foreign plugin file, matching the ownership
-		// contract used by the omp adapter.
-		if !isOwnedPlugin(existing) && !force {
-			return 0, fmt.Errorf("refusing to overwrite foreign kilo plugin %s; pass force to replace it", path)
-		}
-	} else if !os.IsNotExist(readErr) {
-		return 0, readErr
+	} else if !os.IsNotExist(lstatErr) {
+		return 0, lstatErr
 	}
 
 	dir := filepath.Join(root, pluginDir)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return 0, fmt.Errorf("create plugin dir: %w", err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+	if err := atomicWriteFile(path, []byte(content), 0o600); err != nil {
 		return 0, fmt.Errorf("write plugin: %w", err)
 	}
 
@@ -261,14 +274,24 @@ func (a *Agent) UninstallHooks() error {
 	root := protocol.RepoRoot()
 	path := filepath.Join(root, pluginFile)
 
-	// Leave user-owned or third-party Kilo plugins untouched; uninstall only
-	// removes the Entire-generated plugin identified by the ownership marker.
-	if existing, err := os.ReadFile(path); err == nil && !isOwnedPlugin(existing) {
+	// Leave user-owned, symlinked, or otherwise non-regular Kilo plugins
+	// untouched; uninstall only removes a regular Entire-generated plugin.
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
 		return nil
-	} else if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
+	}
+	if err != nil {
 		return err
+	}
+	if !info.Mode().IsRegular() {
+		return nil
+	}
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if !isOwnedPlugin(existing) {
+		return nil
 	}
 
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
