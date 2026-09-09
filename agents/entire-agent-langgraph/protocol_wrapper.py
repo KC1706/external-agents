@@ -133,9 +133,9 @@ def handle_read_session(agent: str, underlying: Path) -> int:
             else:
                 metadata["native_data"] = base64.b64encode(data).decode("ascii")
             metadata.setdefault("agent_name", agent)
-            metadata.setdefault("modified_files", [])
-            metadata.setdefault("new_files", [])
-            metadata.setdefault("deleted_files", [])
+            for field in ("modified_files", "new_files", "deleted_files"):
+                if metadata.get(field) is None:
+                    metadata[field] = []
             write_json(metadata)
             return 0
 

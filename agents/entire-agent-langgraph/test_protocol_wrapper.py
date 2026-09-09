@@ -68,6 +68,28 @@ class SessionTests(unittest.TestCase):
         self.assertNotIn("native_data", metadata)
         self.assertEqual(base64.b64decode(self.read()["native_data"]), self.original)
 
+    def test_null_file_lists_are_initialized_after_restore(self):
+        self.restore()
+        session = self.read()
+        fields = ("modified_files", "new_files", "deleted_files")
+        for field in fields:
+            session[field] = None
+        self.command("write-session", session)
+        restored = self.read()
+        for field in fields:
+            self.assertEqual(restored[field], [])
+
+    def test_nonempty_file_lists_survive_restore(self):
+        self.restore()
+        session = self.read()
+        files = {"modified_files": ["changed.py"], "new_files": ["new.py"],
+                 "deleted_files": ["removed.py"]}
+        session.update(files)
+        self.command("write-session", session)
+        restored = self.read()
+        for field, expected in files.items():
+            self.assertEqual(restored[field], expected)
+
     def test_restore_requires_nonempty_string_session_ref(self):
         for fields in ({}, {"session_ref": None}, {"session_ref": ""},
                        {"session_ref": 0}, {"session_ref": False},
