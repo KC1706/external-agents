@@ -27,6 +27,10 @@ func threadIDFromTranscriptData(data []byte) (string, error) {
 		return "", errors.New("empty amp transcript")
 	}
 
+	if thread, ok := legacyThreadExport(trimmed); ok && strings.TrimSpace(thread.ID) != "" {
+		return strings.TrimSpace(thread.ID), nil
+	}
+
 	// An unprepared transcript is not an error here: the hook payloads it
 	// holds are exactly what carries the thread id we need to export with.
 	if messages, err := decodeTranscript(trimmed); err == nil {

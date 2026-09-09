@@ -1,7 +1,6 @@
 package amp
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -10,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-const maxTranscriptLine = 10 * 1024 * 1024
 
 // The on-disk transcript is stored as JSONL: exactly one ThreadMessage per
 // line, in order, with no thread header line. Entire scopes external-agent
@@ -185,6 +182,11 @@ func materializeThread(thread *Thread) ([]byte, error) {
 	if thread == nil {
 		return nil, nil
 	}
+	if len(thread.Messages) == 0 {
+		// Keep the native header until a message can carry the thread ID.
+		// Otherwise the next prepare cannot identify this empty session.
+		return json.Marshal(thread)
+	}
 	return encodeMessagesJSONL(stampThreadID(thread.Messages, thread.ID))
 }
 
@@ -210,6 +212,8 @@ func stampThreadID(messages []ThreadMessage, threadID string) []ThreadMessage {
 // written before amp materialized JSONL keep reading; the next export rewrites
 // them as JSONL. A file that holds only unprepared hook payloads reports
 // errTranscriptNotPrepared, as the single-document parser used to.
+// Iterate the bytes already in memory: the native payload plus its projection
+// can exceed Scanner's line limit even when the source message fits it.
 func decodeTranscript(data []byte) ([]ThreadMessage, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
@@ -223,10 +227,8 @@ func decodeTranscript(data []byte) ([]ThreadMessage, error) {
 
 	messages := make([]ThreadMessage, 0)
 	unprepared := false
-	scanner := bufio.NewScanner(bytes.NewReader(trimmed))
-	scanner.Buffer(make([]byte, 64*1024), maxTranscriptLine)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
+	for rawLine := range bytes.SplitSeq(trimmed, []byte{'\n'}) {
+		line := bytes.TrimSpace(rawLine)
 		if len(line) == 0 {
 			continue
 		}
@@ -238,9 +240,6 @@ func decodeTranscript(data []byte) ([]ThreadMessage, error) {
 		if isHookPayloadLine(line) {
 			unprepared = true
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan amp transcript: %w", err)
 	}
 	if len(messages) == 0 && unprepared {
 		return nil, errTranscriptNotPrepared
