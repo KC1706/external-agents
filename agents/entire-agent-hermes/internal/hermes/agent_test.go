@@ -1011,6 +1011,11 @@ with tempfile.TemporaryDirectory() as tmp:
         ({"workdir": str(other / ".eNtIrE")}, []),
         ({"path": str(metadata_alias / "local" / "file.txt")}, []),
         ({"path": str(other / "metadata-link" / "settings.json")}, []),
+        ({"cwd": "~entire-observer-nonexistent-user/repo", "path": str(other / "hello.txt")}, [other]),
+        ({"cwd": ["~entire-observer-nonexistent-user/repo", str(other)], "path": "hello.txt"}, [other]),
+        ({"paths": ["~entire-observer-nonexistent-user/file", str(other / "hello.txt")]}, [other]),
+        ({"cwd": "~entire-observer-nonexistent-user/repo", "path": "hello.txt"}, []),
+        ({"path": "~entire-observer-nonexistent-user/file"}, []),
     ]
     for relative in (".GIT/config", ".EnTiRe/settings.json", "child/.gIt/config"):
         assert module._safe_relative_path(other, relative) is None, relative

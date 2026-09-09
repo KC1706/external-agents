@@ -281,18 +281,15 @@ def _repositories(args: Any = None) -> list[Tuple[Path, Path, str]]:
 
     # The process directory may belong to a different gateway task. Accept
     # relative targets only with an explicit absolute working directory.
-    workdirs = [
-        _absolute_path(value) for value in workdir_values
-        if Path(value).expanduser().is_absolute()
-    ]
+    workdirs = [_absolute_path(value) for value in workdir_values]
     workdirs = [value for value in workdirs if value is not None]
 
     matches: Dict[str, Tuple[Path, Path, str]] = {}
     if path_seen:
         bases = workdirs
         for value in path_values:
-            raw = Path(value).expanduser() if isinstance(value, str) else None
-            candidates = [_absolute_path(value)] if raw is not None and raw.is_absolute() else [_absolute_path(value, base) for base in bases]
+            absolute = _absolute_path(value)
+            candidates = [absolute] if absolute is not None else [_absolute_path(value, base) for base in bases]
             for candidate in candidates:
                 match = _match_repository(home, registrations, candidate, True)
                 if match is not None:
