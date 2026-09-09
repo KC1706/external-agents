@@ -971,6 +971,13 @@ with tempfile.TemporaryDirectory() as tmp:
     registry.write_text(json.dumps({"version": 1, "repositories": [
         {"path": str(path), "entire_bin": "unused"} for path in (outer, nested, other)
     ]}))
+    shared = outer / "shared"; shared.mkdir()
+    local = nested / "local"; local.mkdir()
+    for name in (".git", ".entire", "parent-link"):
+        (nested / name).symlink_to(shared, target_is_directory=True)
+    (nested / "other-link").symlink_to(other, target_is_directory=True)
+    (nested / "local-link").symlink_to(local, target_is_directory=True)
+    alias = root / "nested-alias"; alias.symlink_to(nested, target_is_directory=True)
     os.chdir(outer)
     cases = [
         ({"path": "hello.txt"}, []),
@@ -984,6 +991,16 @@ with tempfile.TemporaryDirectory() as tmp:
         ({"path": str(nested / ".entire" / "settings.json")}, []),
         ({"path": str(nested / ".git")}, []),
         ({"path": str(nested / ".entire")}, []),
+        ({"workdir": str(nested / ".entire"), "path": "settings.json"}, []),
+        ({"cwd": str(nested / ".git")}, []),
+        ({"path": str(nested / "parent-link" / "file.txt")}, []),
+        ({"cwd": str(nested / "parent-link"), "path": "file.txt"}, []),
+        ({"path": str(nested / "other-link" / "file.txt")}, []),
+        ({"path": str(nested / "local-link" / "file.txt")}, [nested]),
+        ({"path": str(alias / "local-link" / "file.txt")}, [nested]),
+        ({"cwd": str(alias), "path": "local/file.txt"}, [nested]),
+        ({"path": str(alias / ".entire" / "settings.json")}, []),
+        ({"path": str(alias / "parent-link" / "file.txt")}, []),
     ]
     failures = []
     for args, expected in cases:

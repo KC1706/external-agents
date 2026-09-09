@@ -132,7 +132,7 @@ def _load_registry() -> Tuple[Optional[Path], list[Dict[str, str]]]:
         return home, []
 
 
-def _canonical_path(value: str, base: Optional[Path] = None) -> Optional[Path]:
+def _absolute_path(value: str, base: Optional[Path] = None) -> Optional[Path]:
     if not isinstance(value, str) or not value.strip() or "\x00" in value:
         return None
     try:
@@ -144,9 +144,11 @@ def _canonical_path(value: str, base: Optional[Path] = None) -> Optional[Path]:
             return None
         if not candidate.is_absolute():
             if base is None:
-                base = Path.cwd().resolve()
+                return None
             candidate = base / candidate
-        return candidate.resolve()
+        # Preserve lexical components until repository ownership and metadata
+        # exclusions have been established.
+        return candidate
     except Exception:
         return None
 
@@ -209,6 +211,16 @@ def _relative_to_repository(candidate: Path, repo: Path) -> Optional[Path]:
         return None
 
 
+def _owning_repository(
+    repositories: list[Tuple[Path, str]], candidate: Path,
+) -> Optional[Tuple[Path, str]]:
+    matches = [
+        (repo, entire_bin) for repo, entire_bin in repositories
+        if _relative_to_repository(candidate, repo) is not None
+    ]
+    return max(matches, key=lambda value: len(value[0].parts)) if matches else None
+
+
 def _match_repository(
     home: Path,
     repositories: list[Tuple[Path, str]],
@@ -217,21 +229,42 @@ def _match_repository(
 ) -> Optional[Tuple[Path, Path, str]]:
     if candidate is None:
         return None
-    matches = [
-        (repo, entire_bin) for repo, entire_bin in repositories
-        if _relative_to_repository(candidate, repo) is not None
-    ]
-    if not matches:
+    try:
+        owner = _owning_repository(repositories, candidate)
+        if owner is None:
+            # Support aliases to repository roots (including macOS /var), but
+            # stop resolving at the first registered root. Keep its suffix
+            # lexical so metadata links cannot erase an exclusion or owner.
+            roots = {repo for repo, _ in repositories}
+            for prefix in reversed((candidate, *candidate.parents)):
+                if prefix.name in {".git", ".entire"}:
+                    return None
+                resolved_prefix = prefix.resolve()
+                if resolved_prefix in roots:
+                    candidate = resolved_prefix / candidate.relative_to(prefix)
+                    owner = _owning_repository(repositories, candidate)
+                    break
+        if owner is None:
+            return None
+        repo, entire_bin = owner
+        relative = candidate.relative_to(repo)
+        if any(part in {".git", ".entire"} for part in relative.parts):
+            return None
+        resolved = candidate.resolve()
+        # A symlink may stay inside its owner, but must not select an ancestor,
+        # sibling, or nested registration by changing the filesystem target.
+        if _owning_repository(repositories, resolved) != owner:
+            return None
+        if any(part in {".git", ".entire"} for part in resolved.relative_to(repo).parts):
+            return None
+        if path_evidence and (
+            _safe_relative_path(repo, str(relative)) is None
+            or _safe_relative_path(repo, str(resolved)) is None
+        ):
+            return None
+        return home, repo, entire_bin
+    except (OSError, RuntimeError, ValueError):
         return None
-    # Ownership is determined before exclusions. A rejected target in a nested
-    # repository must never fall back to an enclosing repository.
-    repo, entire_bin = max(matches, key=lambda value: len(value[0].parts))
-    relative = candidate.relative_to(repo)
-    if any(part in {".git", ".entire"} for part in relative.parts):
-        return None
-    if path_evidence and _safe_relative_path(repo, str(candidate)) is None:
-        return None
-    return home, repo, entire_bin
 
 
 def _repositories(args: Any = None) -> list[Tuple[Path, Path, str]]:
@@ -249,7 +282,7 @@ def _repositories(args: Any = None) -> list[Tuple[Path, Path, str]]:
     # The process directory may belong to a different gateway task. Accept
     # relative targets only with an explicit absolute working directory.
     workdirs = [
-        _canonical_path(value) for value in workdir_values
+        _absolute_path(value) for value in workdir_values
         if Path(value).expanduser().is_absolute()
     ]
     workdirs = [value for value in workdirs if value is not None]
@@ -259,7 +292,7 @@ def _repositories(args: Any = None) -> list[Tuple[Path, Path, str]]:
         bases = workdirs
         for value in path_values:
             raw = Path(value).expanduser() if isinstance(value, str) else None
-            candidates = [_canonical_path(value)] if raw is not None and raw.is_absolute() else [_canonical_path(value, base) for base in bases]
+            candidates = [_absolute_path(value)] if raw is not None and raw.is_absolute() else [_absolute_path(value, base) for base in bases]
             for candidate in candidates:
                 match = _match_repository(home, registrations, candidate, True)
                 if match is not None:
