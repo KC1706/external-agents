@@ -237,7 +237,7 @@ def _match_repository(
             # lexical so metadata links cannot erase an exclusion or owner.
             roots = {repo for repo, _ in repositories}
             for prefix in reversed((candidate, *candidate.parents)):
-                if prefix.name in {".git", ".entire"}:
+                if prefix.name.casefold() in {".git", ".entire"}:
                     return None
                 resolved_prefix = prefix.resolve()
                 if resolved_prefix in roots:
@@ -248,14 +248,14 @@ def _match_repository(
             return None
         repo, entire_bin = owner
         relative = candidate.relative_to(repo)
-        if any(part in {".git", ".entire"} for part in relative.parts):
+        if any(part.casefold() in {".git", ".entire"} for part in relative.parts):
             return None
         resolved = candidate.resolve()
         # A symlink may stay inside its owner, but must not select an ancestor,
         # sibling, or nested registration by changing the filesystem target.
         if _owning_repository(repositories, resolved) != owner:
             return None
-        if any(part in {".git", ".entire"} for part in resolved.relative_to(repo).parts):
+        if any(part.casefold() in {".git", ".entire"} for part in resolved.relative_to(repo).parts):
             return None
         if path_evidence and (
             _safe_relative_path(repo, str(relative)) is None
@@ -344,7 +344,7 @@ def _safe_relative_path(repo: Path, value: str) -> Optional[str]:
         text = normalized.as_posix()
     except Exception:
         return None
-    if text in {"", "."} or text.startswith((".git/", ".entire/")):
+    if text in {"", "."} or any(part.casefold() in {".git", ".entire"} for part in normalized.parts):
         return None
     if _SENSITIVE_PATH.search(text):
         return None

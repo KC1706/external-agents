@@ -978,6 +978,10 @@ with tempfile.TemporaryDirectory() as tmp:
     (nested / "other-link").symlink_to(other, target_is_directory=True)
     (nested / "local-link").symlink_to(local, target_is_directory=True)
     alias = root / "nested-alias"; alias.symlink_to(nested, target_is_directory=True)
+    for name in (".git", ".entire"):
+        (other / name).mkdir()
+    metadata_alias = root / ".GiT"; metadata_alias.symlink_to(nested, target_is_directory=True)
+    (other / "metadata-link").symlink_to(other / ".EnTiRe", target_is_directory=True)
     os.chdir(outer)
     cases = [
         ({"path": "hello.txt"}, []),
@@ -1001,7 +1005,15 @@ with tempfile.TemporaryDirectory() as tmp:
         ({"cwd": str(alias), "path": "local/file.txt"}, [nested]),
         ({"path": str(alias / ".entire" / "settings.json")}, []),
         ({"path": str(alias / "parent-link" / "file.txt")}, []),
+        ({"path": str(other / ".GIT" / "config")}, []),
+        ({"path": str(other / ".ENTIRE" / "settings.json")}, []),
+        ({"cwd": str(other / ".gIt"), "path": "config"}, []),
+        ({"workdir": str(other / ".eNtIrE")}, []),
+        ({"path": str(metadata_alias / "local" / "file.txt")}, []),
+        ({"path": str(other / "metadata-link" / "settings.json")}, []),
     ]
+    for relative in (".GIT/config", ".EnTiRe/settings.json", "child/.gIt/config"):
+        assert module._safe_relative_path(other, relative) is None, relative
     failures = []
     for args, expected in cases:
         actual = [info[1] for info in module._repositories(args)]
