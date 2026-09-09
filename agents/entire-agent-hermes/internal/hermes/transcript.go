@@ -15,7 +15,12 @@ import (
 
 var errTranscriptPathNotOwned = errors.New("transcript path is not owned by the Hermes observer")
 
-const maxTranscriptLineSize = 16 * 1024 * 1024
+const (
+	maxTranscriptLineSize = 16 * 1024 * 1024
+	entryTypeUser         = "user"
+	entryTypeAssistant    = "assistant"
+	entryTypeTool         = "tool"
+)
 
 type transcriptEntry struct {
 	Version       int                `json:"v"`
@@ -136,17 +141,17 @@ func marshalPortableEntry(entry transcriptEntry) ([]byte, error) {
 		ModifiedFiles: entry.ModifiedFiles,
 	}
 	switch entry.Type {
-	case "user":
+	case entryTypeUser:
 		if entry.Content != "" {
 			portable.Message = &portableMessage{Content: entry.Content}
 		}
-	case "assistant":
+	case entryTypeAssistant:
 		if entry.Content != "" {
 			portable.Message = &portableMessage{Content: []portableAssistantBlock{{Type: "text", Text: entry.Content}}}
 		}
-	case "tool":
-		portable.Type = "assistant"
-		portable.HermesType = "tool"
+	case entryTypeTool:
+		portable.Type = entryTypeAssistant
+		portable.HermesType = entryTypeTool
 		portable.Message = &portableMessage{Content: []portableAssistantBlock{{
 			Type:  "tool_use",
 			Name:  entry.Name,
@@ -194,7 +199,7 @@ func isObserverTranscript(entries []transcriptEntry) bool {
 	}
 	for _, entry := range entries {
 		switch entry.Type {
-		case "session_start", "user", "assistant", "tool", "turn_end", "session_end":
+		case "session_start", entryTypeUser, entryTypeAssistant, entryTypeTool, "turn_end", "session_end":
 		default:
 			return false
 		}
@@ -419,7 +424,7 @@ func (a *Agent) ExtractPrompts(path string, offset int) ([]string, error) {
 	}
 	prompts := make([]string, 0)
 	for _, entry := range entries {
-		if entry.Type == "user" && entry.Content != "" {
+		if entry.Type == entryTypeUser && entry.Content != "" {
 			prompts = append(prompts, entry.Content)
 		}
 	}
@@ -435,7 +440,7 @@ func (a *Agent) ExtractSummary(path string) (string, bool, error) {
 		return "", false, err
 	}
 	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].Type == "assistant" && entries[i].Content != "" {
+		if entries[i].Type == entryTypeAssistant && entries[i].Content != "" {
 			return entries[i].Content, true, nil
 		}
 	}

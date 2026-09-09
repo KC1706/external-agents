@@ -48,18 +48,18 @@ func (a *Agent) CompactTranscript(path string) (protocol.CompactTranscriptRespon
 		var content any
 		typ := entry.Type
 		switch entry.Type {
-		case "user":
+		case entryTypeUser:
 			if entry.Content == "" {
 				continue
 			}
 			content = []compactUserBlock{{Text: entry.Content}}
-		case "assistant":
+		case entryTypeAssistant:
 			if entry.Content == "" {
 				continue
 			}
 			content = []compactAssistantBlock{{Type: "text", Text: entry.Content}}
-		case "tool":
-			typ = "assistant"
+		case entryTypeTool:
+			typ = entryTypeAssistant
 			status := entry.Status
 			if status == "ok" {
 				status = "success"
