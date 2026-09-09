@@ -325,7 +325,7 @@ func safeFilename(name string) string {
 const maxSidecarLine = 10 * 1024 * 1024
 
 // readSidecarRecords parses the append-only JSONL sidecar. Unparseable lines
-// are skipped rather than failing the whole read: the sidecar can be read
+// retain empty placeholders rather than failing the whole read: the sidecar can be read
 // while Qwen is mid-turn, and a single torn or foreign line must not destroy
 // the rest of the session.
 func readSidecarRecords(path string) ([]sidecarRecord, error) {
@@ -340,12 +340,12 @@ func readSidecarRecords(path string) ([]sidecarRecord, error) {
 	scanner.Buffer(make([]byte, 64*1024), maxSidecarLine)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
 		var record sidecarRecord
 		if json.Unmarshal([]byte(line), &record) != nil {
-			continue
+			// Keep a placeholder for every physical line: Entire slices the
+			// original bytes by newline, including blank and malformed lines.
+			// Reset partial fields populated before a JSON type error, too.
+			record = sidecarRecord{}
 		}
 		records = append(records, record)
 	}
