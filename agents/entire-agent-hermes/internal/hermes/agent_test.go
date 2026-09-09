@@ -555,7 +555,7 @@ func TestObserverResolvesGatewayAbsoluteWriteAndForwardsLifecycleBeforeMutation(
 		t.Skip("python3 is unavailable")
 	}
 	home := t.TempDir()
-	repo := t.TempDir()
+	repo := canonicalTempDir(t)
 	gatewayDir := t.TempDir()
 	binDir := t.TempDir()
 	mutationPath := filepath.Join(repo, "created.txt")
@@ -774,7 +774,7 @@ func TestObserverRejectsTraversalSensitiveAndUsesLongestRegisteredRepo(t *testin
 		t.Skip("python3 is unavailable")
 	}
 	home := t.TempDir()
-	outer := t.TempDir()
+	outer := canonicalTempDir(t)
 	nested := filepath.Join(outer, "nested")
 	if err := os.MkdirAll(nested, 0o700); err != nil {
 		t.Fatal(err)
@@ -944,4 +944,72 @@ func writeFixture(t *testing.T, path string, data []byte, mode os.FileMode) {
 func writeExecutable(t *testing.T, path, content string) {
 	t.Helper()
 	writeFixture(t, path, []byte(content), 0o700)
+}
+
+func TestObserverRepositoryAttributionBoundaries(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is unavailable")
+	}
+	script := `
+import importlib.util
+import json
+import os
+import tempfile
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("observer", "plugin/__init__.py")
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp).resolve()
+    home, outer, other = (root / name for name in ("home", "outer", "other"))
+    nested = outer / "nested"
+    for path in (home, outer, other, nested): path.mkdir(parents=True, exist_ok=True)
+    os.environ["HERMES_HOME"] = str(home)
+    os.environ["TERMINAL_CWD"] = str(other)
+    registry = home / "plugins" / "entire-observer" / "repositories.json"
+    registry.parent.mkdir(parents=True)
+    registry.write_text(json.dumps({"version": 1, "repositories": [
+        {"path": str(path), "entire_bin": "unused"} for path in (outer, nested, other)
+    ]}))
+    os.chdir(outer)
+    cases = [
+        ({"path": "hello.txt"}, []),
+        ({"cwd": ".", "path": "hello.txt"}, []),
+        ({"cwd": "../other", "path": "hello.txt"}, []),
+        ({"cwd": None, "path": "hello.txt"}, []),
+        ({"cwd": str(other), "path": "hello.txt"}, [other]),
+        ({"path": str(other / "hello.txt")}, [other]),
+        ({"path": str(nested / "hello.txt")}, [nested]),
+        ({"path": str(nested / ".git" / "config")}, []),
+        ({"path": str(nested / ".entire" / "settings.json")}, []),
+        ({"path": str(nested / ".git")}, []),
+        ({"path": str(nested / ".entire")}, []),
+    ]
+    failures = []
+    for args, expected in cases:
+        actual = [info[1] for info in module._repositories(args)]
+        if actual != expected: failures.append(f"{args}: expected {expected}, got {actual}")
+    # Rejected evidence must not persist or forward the buffered conversation.
+    module._forward = lambda *args, **kwargs: failures.append("unexpected lifecycle forwarding")
+    module._on_pre_llm_call(session_id="session", user_message="private prompt")
+    for args, expected in cases:
+        if not expected:
+            module._on_pre_tool_call(session_id="session", args=args)
+            module._on_post_tool_call(session_id="session", args=args)
+    assert not list(home.glob("entire/transcripts/**/*.jsonl")), "rejected evidence wrote a transcript"
+    assert not failures, "\n".join(failures)
+`
+	cmd := exec.Command(python, "-c", script)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("repository attribution regression: %v\n%s", err, output)
+	}
+}
+
+func canonicalTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }

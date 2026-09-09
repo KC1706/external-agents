@@ -238,13 +238,13 @@ callbacks["pre_llm_call"](
 callbacks["pre_tool_call"](
     session_id=session,
     tool_name="write_file",
-    args={"path": "hello.txt", "content": "raw-tool-secret"},
+    args={"path": str(repo / "hello.txt"), "content": "raw-tool-secret"},
 )
 (repo / "hello.txt").write_text("hello\n", encoding="utf-8")
 callbacks["post_tool_call"](
     session_id=session,
     tool_name="write_file",
-    args={"path": "hello.txt", "content": "raw-tool-secret"},
+    args={"path": str(repo / "hello.txt"), "content": "raw-tool-secret"},
     result="raw-tool-result-secret",
     status="ok",
 )

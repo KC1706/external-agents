@@ -217,21 +217,20 @@ def _match_repository(
 ) -> Optional[Tuple[Path, Path, str]]:
     if candidate is None:
         return None
-    matches = []
-    for repo, entire_bin in repositories:
-        relative = _relative_to_repository(candidate, repo)
-        if relative is None:
-            continue
-        if path_evidence:
-            safe = _safe_relative_path(repo, str(candidate))
-            if safe is None:
-                continue
-        elif any(part in {".git", ".entire"} for part in relative.parts):
-            continue
-        matches.append((repo, entire_bin))
+    matches = [
+        (repo, entire_bin) for repo, entire_bin in repositories
+        if _relative_to_repository(candidate, repo) is not None
+    ]
     if not matches:
         return None
+    # Ownership is determined before exclusions. A rejected target in a nested
+    # repository must never fall back to an enclosing repository.
     repo, entire_bin = max(matches, key=lambda value: len(value[0].parts))
+    relative = candidate.relative_to(repo)
+    if any(part in {".git", ".entire"} for part in relative.parts):
+        return None
+    if path_evidence and _safe_relative_path(repo, str(candidate)) is None:
+        return None
     return home, repo, entire_bin
 
 
@@ -247,16 +246,17 @@ def _repositories(args: Any = None) -> list[Tuple[Path, Path, str]]:
     if isinstance(args, dict):
         workdir_values, path_values, workdir_seen, path_seen = _path_fields(args)
 
-    try:
-        process_cwd = Path.cwd().resolve()
-    except Exception:
-        process_cwd = None
-    workdirs = [_canonical_path(value, process_cwd) for value in workdir_values]
+    # The process directory may belong to a different gateway task. Accept
+    # relative targets only with an explicit absolute working directory.
+    workdirs = [
+        _canonical_path(value) for value in workdir_values
+        if Path(value).expanduser().is_absolute()
+    ]
     workdirs = [value for value in workdirs if value is not None]
 
     matches: Dict[str, Tuple[Path, Path, str]] = {}
     if path_seen:
-        bases: list[Optional[Path]] = workdirs or [process_cwd]
+        bases = workdirs
         for value in path_values:
             raw = Path(value).expanduser() if isinstance(value, str) else None
             candidates = [_canonical_path(value)] if raw is not None and raw.is_absolute() else [_canonical_path(value, base) for base in bases]
