@@ -25,6 +25,7 @@ class SessionTests(unittest.TestCase):
             [sys.executable, str(Path(__file__).with_name("protocol_wrapper.py")),
              self.agent, command],
             input=json.dumps(payload), text=True, capture_output=True, check=True,
+            env=dict(os.environ, ENTIRE_REPO_ROOT=self.temp.name),
         )
         return json.loads(result.stdout) if result.stdout else None
 
@@ -67,6 +68,15 @@ class SessionTests(unittest.TestCase):
         metadata = json.loads(self.path.with_suffix(".jsonl.session.json").read_text())
         self.assertNotIn("native_data", metadata)
         self.assertEqual(base64.b64decode(self.read()["native_data"]), self.original)
+
+    def test_install_replaces_marker_symlink_without_overwriting_target(self):
+        marker = Path(self.temp.name) / ".entire" / f"{self.agent}-adapter-hooks-installed.json"
+        marker.parent.mkdir()
+        marker.symlink_to(self.path)
+        self.command("install-hooks", {})
+        self.assertEqual(self.path.read_bytes(), self.original)
+        self.assertFalse(marker.is_symlink())
+        self.assertEqual(json.loads(marker.read_text())["agent"], self.agent)
 
     def test_null_file_lists_are_initialized_after_restore(self):
         self.restore()

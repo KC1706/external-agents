@@ -3,11 +3,10 @@ from __future__ import annotations
 import base64
 import json
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 
 def repo_root() -> Path:
@@ -46,19 +45,15 @@ def decode_native(value: Any) -> bytes:
 def handle_install(agent: str) -> int:
     path = marker_path(agent)
     already = path.exists()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {
-                "agent": agent,
-                "kind": "callback-bridge-marker",
-                "description": "Entire Adapter invokes lifecycle hooks from Python callbacks/listeners.",
-            },
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    data = json.dumps(
+        {
+            "agent": agent,
+            "kind": "callback-bridge-marker",
+            "description": "Entire Adapter invokes lifecycle hooks from Python callbacks/listeners.",
+        },
+        sort_keys=True,
+    ) + "\n"
+    write_private(path, data.encode("utf-8"))
     write_json({"hooks_installed": 0 if already else 1})
     return 0
 
@@ -142,15 +137,16 @@ def handle_read_session(agent: str, underlying: Path) -> int:
     return forward(underlying, ["read-session"], json.dumps(payload).encode("utf-8"))
 
 
-def forward(underlying: Path, args: list[str], stdin: bytes | None = None) -> int:
-    completed = subprocess.run(
-        [str(underlying), *args],
-        input=stdin,
-        stdout=sys.stdout.buffer,
-        stderr=sys.stderr.buffer,
-        check=False,
-    )
-    return completed.returncode
+def forward(underlying: Path, args: list[str], stdin: bytes | None = None) -> NoReturn:
+    if stdin is not None:
+        # read-session inspected stdin before choosing to forward. Replay it
+        # from an unlinked file, avoiding pipe-capacity deadlocks before exec.
+        with tempfile.TemporaryFile() as replay:
+            replay.write(stdin)
+            replay.seek(0)
+            os.dup2(replay.fileno(), 0)
+    # Keep the PID Entire launched, so its timeout cancels the adapter itself.
+    os.execv(str(underlying), [str(underlying), *args])
 
 
 def main() -> int:
