@@ -92,8 +92,9 @@ def write_private(path: Path, data: bytes) -> None:
 def handle_write_session() -> int:
     payload = read_json()
     session_ref = payload.get("session_ref")
-    if not session_ref:
-        return 0
+    if not isinstance(session_ref, str) or not session_ref:
+        print("write-session requires a non-empty session_ref path", file=sys.stderr)
+        return 1
 
     # A metadata-only session (including the adapter's fresh read response)
     # has no transcript to restore. An explicit empty value still restores
