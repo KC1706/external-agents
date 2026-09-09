@@ -52,6 +52,12 @@ jobs:
       - name: Build agent binary
         run: mise run build "${{ matrix.dir }}"
 
+      - name: Install Entire for Hermes hook registration
+        if: matrix.name == 'entire-agent-hermes'
+        run: |
+          go install github.com/entireio/cli/cmd/entire@8b77ad43132d18f7958825c9dcd26544ab8f5d92 # v0.9.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: Run protocol compliance suite
         uses: entireio/external-agents-tests@3220ca8cc7ba2fbfc5a951ce4a5937ca1a5ca26e # main
         env:
