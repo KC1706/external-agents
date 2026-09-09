@@ -1,7 +1,6 @@
 package kiro
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -9,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 )
-
-const maxTranscriptLine = 10 * 1024 * 1024
 
 // roleUser and roleAssistant are the only two kinds normalizeKind
 // (cmd/entire/cli/transcript/compact/compact.go:197) accepts. A line that
@@ -284,9 +281,9 @@ var errNotTranscriptJSONL = errors.New("not kiro transcript JSONL")
 // boundaries, not entry boundaries, so the first entry of a scoped transcript
 // may have lost its user half. Such an entry is reconstructed with only the
 // half that survived.
+// Iterate the bytes already in memory: the native payload plus its projection
+// can exceed Scanner's line limit even when the source message fits it.
 func decodeTranscriptJSONL(data []byte) (*kiroTranscript, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 0, 64*1024), maxTranscriptLine)
 
 	t := &kiroTranscript{}
 	var cur *kiroHistoryEntry
@@ -300,8 +297,8 @@ func decodeTranscriptJSONL(data []byte) (*kiroTranscript, error) {
 		}
 	}
 
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
+	for rawLine := range bytes.SplitSeq(data, []byte{'\n'}) {
+		line := bytes.TrimSpace(rawLine)
 		if len(line) == 0 {
 			continue
 		}
@@ -334,9 +331,6 @@ func decodeTranscriptJSONL(data []byte) (*kiroTranscript, error) {
 		}
 		saw = true
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read kiro transcript: %w", err)
-	}
 	flush()
 
 	if !saw {
@@ -349,11 +343,9 @@ func decodeTranscriptJSONL(data []byte) (*kiroTranscript, error) {
 // the unit get-transcript-position reports and the unit
 // transcript.SliceFromLine consumes.
 func countTranscriptLines(data []byte) int {
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 0, 64*1024), maxTranscriptLine)
 	n := 0
-	for scanner.Scan() {
-		if len(bytes.TrimSpace(scanner.Bytes())) > 0 {
+	for rawLine := range bytes.SplitSeq(data, []byte{'\n'}) {
+		if len(bytes.TrimSpace(rawLine)) > 0 {
 			n++
 		}
 	}
