@@ -48,3 +48,14 @@ func TestFormatResumeCommandRefusesInjectionPayloads(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatResumeCommandRefusesOptions(t *testing.T) {
+	agent := New()
+	for _, id := range []string{"-", "--", "--last", "--help", "-h", "-session"} {
+		t.Run(id, func(t *testing.T) {
+			if got := agent.FormatResumeCommand(id); got != "" {
+				t.Fatalf("FormatResumeCommand(%q) = %q, want empty (refused option)", id, got)
+			}
+		})
+	}
+}

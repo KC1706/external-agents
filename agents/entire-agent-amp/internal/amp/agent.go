@@ -68,7 +68,8 @@ func (a *Agent) FormatResumeCommand(sessionID string) string {
 // else (shell metacharacters, control characters, path separators) makes
 // the resume command unsafe and the formatter refuses to emit it.
 func isValidResumeSessionID(sessionID string) bool {
-	if sessionID == "" {
+	// A leading hyphen can turn a session ID into a CLI option.
+	if sessionID == "" || sessionID[0] == '-' {
 		return false
 	}
 	for _, r := range sessionID {
