@@ -63,6 +63,9 @@ func (a *Agent) ParseHook(hookName string, input []byte) (*protocol.EventJSON, e
 		return nil, nil
 	}
 
+	if !validSessionID(payload.SessionID) {
+		return nil, errors.New("invalid goose session ID")
+	}
 	sessionID := payload.SessionID
 	sessionRef := transcriptPath(sessionID)
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -127,8 +130,8 @@ func (a *Agent) ParseHook(hookName string, input []byte) (*protocol.EventJSON, e
 // transcript, and an export this build cannot parse is stored verbatim rather
 // than discarded — an unrecognised goose version must not break checkpointing.
 func (a *Agent) exportSession(sessionID, sessionRef string) error {
-	if sessionID == "" || sessionRef == "" {
-		return errors.New("session id and session ref are required")
+	if !validSessionID(sessionID) || sessionRef == "" {
+		return errors.New("valid session id and session ref are required")
 	}
 	dir := filepath.Dir(sessionRef)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -144,7 +147,7 @@ func (a *Agent) exportSession(sessionID, sessionRef string) error {
 	}
 	defer func() { _ = os.RemoveAll(scratch) }()
 
-	nativePath := filepath.Join(scratch, sessionID+".json")
+	nativePath := filepath.Join(scratch, "export.json")
 	ctx, cancel := context.WithTimeout(context.Background(), exportTimeout)
 	defer cancel()
 	if err := runner.ExportSession(ctx, sessionID, nativePath); err != nil {

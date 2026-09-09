@@ -1,7 +1,6 @@
 package goose
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -12,7 +11,7 @@ import (
 	"time"
 )
 
-const maxTranscriptLine = 10 * 1024 * 1024
+const contentTypeText = "text"
 
 // The materialized transcript is stored as JSONL: exactly one conversation
 // message per line, in order, with no header line. Entire scopes
@@ -152,7 +151,7 @@ func wireContent(blocks []gooseContent) []any {
 	out := make([]any, 0, len(blocks))
 	for _, block := range blocks {
 		switch block.Type {
-		case "text":
+		case contentTypeText:
 			if block.Text != "" {
 				out = append(out, wireTextBlock{Type: "text", Text: block.Text})
 			}
@@ -186,7 +185,7 @@ func wireContent(blocks []gooseContent) []any {
 func toolResponseText(block gooseContent) string {
 	var parts []string
 	for _, content := range block.ToolResult.Value.Content {
-		if content.Type == "text" && content.Text != "" {
+		if content.Type == contentTypeText && content.Text != "" {
 			parts = append(parts, content.Text)
 		}
 	}
@@ -222,14 +221,14 @@ func encodeSessionJSONL(export *gooseExport) ([]byte, error) {
 // the native gooseMessage fields are read — the Entire-facing projection is
 // derived data and is ignored, so a transcript written before the projection
 // existed still decodes and the next export self-heals it.
+// Iterate the bytes already in memory: the native payload plus its projection
+// can exceed Scanner's line limit even when the source message fits it.
 func decodeSessionJSONL(data []byte) (*gooseExport, error) {
 	export := &gooseExport{Conversation: []gooseMessage{}}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 64*1024), maxTranscriptLine)
 	line := 0
-	for scanner.Scan() {
+	for rawLine := range bytes.SplitSeq(data, []byte{'\n'}) {
 		line++
-		raw := bytes.TrimSpace(scanner.Bytes())
+		raw := bytes.TrimSpace(rawLine)
 		if len(raw) == 0 {
 			continue
 		}
@@ -244,9 +243,6 @@ func decodeSessionJSONL(data []byte) (*gooseExport, error) {
 			continue
 		}
 		export.Conversation = append(export.Conversation, record.gooseMessage)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan goose transcript: %w", err)
 	}
 	return export, nil
 }
@@ -273,7 +269,9 @@ func legacyGooseExport(data []byte) (*gooseExport, bool) {
 // layout.
 func materializeExport(raw []byte) ([]byte, bool) {
 	export, ok := legacyGooseExport(bytes.TrimSpace(raw))
-	if !ok {
+	if !ok || len(export.Conversation) == 0 {
+		// No message can carry the metadata yet. Keep the native empty
+		// export until the first message arrives, preserving ID/model/name.
 		return nil, false
 	}
 	data, err := encodeSessionJSONL(export)

@@ -127,7 +127,7 @@ func compactTranscriptBytes(data []byte) ([]byte, error) {
 func compactUserContent(blocks []gooseContent) []compactUserTextBlock {
 	out := []compactUserTextBlock{}
 	for _, block := range blocks {
-		if block.Type == "text" && block.Text != "" {
+		if block.Type == contentTypeText && block.Text != "" {
 			out = append(out, compactUserTextBlock{Text: block.Text})
 		}
 	}
