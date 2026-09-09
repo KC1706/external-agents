@@ -22,7 +22,7 @@ mise run build
 ./entire-agent-langgraph info
 ```
 
-The source build creates a local `.venv`, installs `entire-adapter[langgraph]==0.2.1`, and writes `./entire-agent-langgraph`.
+The source build creates a local `.venv`, installs `entire-adapter[langgraph]==0.2.2`, and writes `./entire-agent-langgraph`.
 
 ## How It Works
 

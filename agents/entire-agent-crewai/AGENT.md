@@ -7,7 +7,7 @@ CrewAI exposes an event listener API that maps to Entire lifecycle events throug
 ## Binary
 
 - Entire external-agent binary: `entire-agent-crewai`
-- Runtime package: `entire-adapter==0.2.1`
+- Runtime package: `entire-adapter==0.2.2`
 - User package for real CrewAI projects: `entire-adapter[crewai]`
 - Entire agent name: `crewai`
 
@@ -30,4 +30,4 @@ The PyPI package implements Entire's external-agent protocol commands, including
 
 ## E2E Strategy
 
-Default CI validates CrewAI protocol behavior without live LLM credentials. Full CrewAI runtime smoke coverage is gated by `CREWAI_E2E=1`.
+Default CI validates CrewAI protocol behavior without live LLM credentials. Runtime listener coverage is gated by `CREWAI_E2E=1`, which installs `crewai==1.15.20` on Python 3.13. A deterministic real-event-bus fixture exercises kickoff, tool start/finish, and completion through `EntireCrewAIListener`, then the Go harness verifies a committed Entire checkpoint and transcript. It needs no LLM credentials.

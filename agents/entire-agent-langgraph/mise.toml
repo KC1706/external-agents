@@ -3,7 +3,7 @@ description = "Build the entire-agent-langgraph wrapper"
 run = """
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install 'entire-adapter[langgraph]==0.2.1'
+.venv/bin/python -m pip install 'entire-adapter[langgraph]==0.2.2'
 cat > entire-agent-langgraph <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

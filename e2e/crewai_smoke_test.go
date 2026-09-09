@@ -3,11 +3,13 @@
 package e2e
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/entireio/external-agents/e2e/entire"
 	"github.com/entireio/external-agents/e2e/testutil"
@@ -16,24 +18,15 @@ import (
 )
 
 func TestLifecycle_CrewAISmoke(t *testing.T) {
+	if selected := os.Getenv("E2E_AGENT"); selected != "" && selected != "crewai" {
+		t.Skip("CrewAI is not selected")
+	}
 	if os.Getenv("CREWAI_E2E") != "1" {
 		t.Skip("set CREWAI_E2E=1 to run CrewAI smoke coverage")
 	}
 
 	binPath, ok := AgentBinaries["entire-agent-crewai"]
 	require.True(t, ok, "entire-agent-crewai binary should be built")
-
-	info := runCrewAIAgent(t, binPath, "info")
-	var infoResp struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-	}
-	require.NoError(t, json.Unmarshal(info, &infoResp))
-	assert.Equal(t, "crewai", infoResp.Name)
-	assert.Equal(t, "CrewAI", infoResp.Type)
-
-	detect := runCrewAIAgent(t, binPath, "detect")
-	assert.JSONEq(t, `{"present":true}`, string(detect))
 
 	repo := t.TempDir()
 	testutil.Git(t, repo, "init")
@@ -46,13 +39,38 @@ func TestLifecycle_CrewAISmoke(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(entireDir, "settings.json"), []byte("{\"external_agents\": true}\n"), 0o644))
 
 	entire.Enable(t, repo, "crewai")
-}
 
-func runCrewAIAgent(t *testing.T, binPath string, args ...string) []byte {
-	t.Helper()
-	cmd := exec.Command(binPath, args...)
-	cmd.Env = os.Environ()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binPath, "__e2e_run_fixture")
+	cmd.Dir = repo
+	cmd.Env = append(os.Environ(), "CREWAI_TELEMETRY_DISABLED=true", "OTEL_SDK_DISABLED=true")
 	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "entire-agent-crewai failed:\n%s", out)
-	return out
+	require.NoError(t, err, "CrewAI event fixture failed:\n%s", out)
+	var session struct {
+		ID  string `json:"session_id"`
+		Ref string `json:"session_ref"`
+	}
+	require.NoError(t, json.Unmarshal(out, &session), "fixture output: %s", out)
+	require.NotEmpty(t, session.ID)
+	require.NotEmpty(t, session.Ref)
+
+	transcript, err := os.ReadFile(session.Ref)
+	require.NoError(t, err)
+	assert.Contains(t, string(transcript), "Create crewai-output.txt")
+	assert.Contains(t, string(transcript), "write_file")
+	assert.Contains(t, string(transcript), "fixture complete")
+	content, err := os.ReadFile(filepath.Join(repo, "crewai-output.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "hello from CrewAI\n", string(content))
+
+	testutil.Git(t, repo, "add", "crewai-output.txt")
+	testutil.Git(t, repo, "commit", "-m", "record CrewAI fixture output")
+	cpID := testutil.AssertHasCheckpointTrailer(t, repo, "HEAD")
+	testutil.AssertCheckpointExists(t, repo, cpID)
+	testutil.ValidateCheckpointDeep(t, repo, testutil.DeepCheckpointValidation{
+		CheckpointID:              cpID,
+		FilesTouched:              []string{"crewai-output.txt"},
+		ExpectedTranscriptContent: []string{"write_file", "hello from CrewAI"},
+	})
 }

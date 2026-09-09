@@ -22,7 +22,7 @@ mise run build
 ./entire-agent-crewai info
 ```
 
-The source build creates a local `.venv`, installs `entire-adapter==0.2.1`, and writes `./entire-agent-crewai`. The build does not install CrewAI itself so protocol CI remains credential-free and lightweight.
+The source build creates a local `.venv`, installs `entire-adapter==0.2.2`, and writes `./entire-agent-crewai`. By default, the build does not install CrewAI itself, keeping protocol CI lightweight.
 
 ## How It Works
 
@@ -55,4 +55,10 @@ mise run test
 mise run clean
 ```
 
-CrewAI lifecycle smoke tests are optional and gated by `CREWAI_E2E=1` because real CrewAI runs may need local LLM configuration.
+Run the optional runtime lifecycle test from the repository root:
+
+```bash
+CREWAI_E2E=1 E2E_AGENT=crewai mise run test:e2e:lifecycle
+```
+
+With `CREWAI_E2E=1`, the build additionally installs `crewai==1.15.20` using Python 3.13 in a separate `.venv-crewai` runtime. Protocol commands keep using the lightweight `.venv` so importing CrewAI cannot delay hook handling. The deterministic fixture emits real CrewAI kickoff, tool-start, tool-finish, and completion events through CrewAI's event bus into `EntireCrewAIListener`. It writes a file and verifies its Entire checkpoint and transcript after committing. No LLM credentials are needed; this tests listener integration, not a model-driven Crew run.

@@ -7,7 +7,7 @@ LangGraph and LangChain expose callback hooks that map cleanly to Entire lifecyc
 ## Binary
 
 - Entire external-agent binary: `entire-agent-langgraph`
-- Runtime package: `entire-adapter[langgraph]==0.2.1`
+- Runtime package: `entire-adapter[langgraph]==0.2.2`
 - Entire agent name: `langgraph`
 
 ## Hook Mechanism
