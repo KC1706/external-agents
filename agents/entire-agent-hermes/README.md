@@ -66,3 +66,5 @@ HERMES_E2E=1 HERMES_HOME="$tmp_home" E2E_AGENT=hermes mise run test:e2e:lifecycl
 ```
 
 An unconfigured temp profile has no model credentials, so compilation can be verified everywhere while live model execution may remain blocked.
+
+Relative tool paths require an explicit absolute `cwd` or `workdir` in the tool arguments. Without that anchor, the observer skips attribution because a gateway task may use a different working directory from the Hermes process. Absolute file targets remain supported. Nested repository exclusions never fall back to a parent registration. Metadata exclusions apply before following symlinks, and the resolved target must remain in the same registered repository.
