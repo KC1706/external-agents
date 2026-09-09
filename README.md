@@ -20,6 +20,11 @@ External agents communicate with Entire CLI via subcommands that accept and retu
 | [Amp](agents/entire-agent-amp/) | `agents/entire-agent-amp/` | Implemented — hooks + transcript analysis + token calculation + compact transcripts |
 | [LangGraph](agents/entire-agent-langgraph/) | `agents/entire-agent-langgraph/` | Implemented — Python callback bridge + transcript analysis |
 | [CrewAI](agents/entire-agent-crewai/) | `agents/entire-agent-crewai/` | Implemented — Python event listener bridge + transcript analysis |
+| [Qwen Code](agents/entire-agent-qwen/) | `agents/entire-agent-qwen/` | Implemented — hooks + transcript analysis + compact transcripts |
+| [Grok Build](agents/entire-agent-grok/) | `agents/entire-agent-grok/` | Implemented — hooks + transcript analysis + compact transcripts |
+| [Oh My Pi](agents/entire-agent-omp/) | `agents/entire-agent-omp/` | Implemented — hooks + transcript analysis + compact transcripts |
+| [Kilo](agents/entire-agent-kilo/) | `agents/entire-agent-kilo/` | Implemented (preview) — hooks + transcript analysis + token calculation + compact transcripts |
+| [Hermes Agent](agents/entire-agent-hermes/) | `agents/entire-agent-hermes/` | Implemented (preview) — sanitized observer hooks + transcript analysis + compact transcripts |
 
 See each agent's own README for setup and usage instructions.
 
@@ -58,6 +63,57 @@ entire enable --agent crewai --telemetry=false
 
 After enabling, add the adapter to your framework code. LangGraph uses
 `EntireCallbackHandler`; CrewAI uses `EntireCrewAIListener`.
+
+### Qwen Code
+
+Qwen support targets the terminal `qwen` coding agent:
+
+```bash
+cd agents/entire-agent-qwen
+mise run build
+cp entire-agent-qwen /usr/local/bin/
+
+cd /path/to/your/repo
+entire enable --agent qwen --telemetry=false
+qwen -p "Create hello.txt with hello world" --yolo
+```
+
+The adapter installs Qwen command hooks in `.qwen/settings.json`. The stable Entire sidecar transcript lives in a repo-scoped OS temp directory, with a small `.entire/tmp/<session>.json` marker for Entire session discovery. Qwen Code must execute actual tools for checkpoints; local model backends that only print XML-style tool tags as text will not fire Qwen `PostToolUse` hooks.
+
+### Grok Build
+
+Grok support targets the Grok Build CLI:
+
+```bash
+cd agents/entire-agent-grok
+mise run build
+cp entire-agent-grok ~/.local/bin/
+
+cd /path/to/your/repo
+entire enable --agent grok --telemetry=false
+grok "Create hello.txt with hello world"
+```
+
+The adapter installs Grok command hooks in `.grok/hooks/entire.json` and reads native transcripts from `~/.grok/sessions/<encoded-cwd>/<session-id>/chat_history.jsonl`. Project hooks require folder trust (`/hooks-trust` or `--trust`) before they execute, and until the folder is trusted Grok skips them silently, so nothing is captured.
+
+Restored sessions can be resumed with `grok --resume <session-id>`, but not at full fidelity: Grok's `encrypted_content` reasoning state is stripped before storage, so a resumed session replays the conversation without its prior reasoning context. Sessions captured before this behaviour shipped cannot be resumed at all. See the [agent README](agents/entire-agent-grok/README.md#session-restore-and-resume).
+
+### Hermes Agent
+
+Hermes support uses an embedded standalone observer plugin and requires an explicit `HERMES_HOME`; it never falls back to the default profile. The observer stores a repository-scoped sanitized JSONL transcript and intentionally excludes system/developer prompts, memory, full history, platform identifiers, environment data, secrets, tool arguments, and raw tool results.
+
+```bash
+cd agents/entire-agent-hermes
+mise run build
+export PATH="$PWD:$PATH"
+export HERMES_HOME=/absolute/path/to/a/hermes/profile
+
+cd /path/to/your/repo
+entire enable --agent hermes --telemetry=false
+hermes --yolo --ignore-rules -z "Create hello.txt with hello world"
+```
+
+One profile can register multiple repositories. Uninstalling the adapter from one repository leaves unrelated Hermes plugins and other repository registrations intact. See the [Hermes adapter README](agents/entire-agent-hermes/) for the disposable-profile verification flow.
 
 ## Building a New External Agent
 
@@ -130,6 +186,8 @@ The lifecycle harness auto-discovers and builds all agents in `agents/` via `Tes
 | `E2E_ARTIFACT_DIR` | Override lifecycle artifact output directory |
 | `E2E_KEEP_REPOS` | Preserve temp repos for debugging |
 | `E2E_CONCURRENT_TEST_LIMIT` | Override the per-agent lifecycle concurrency limit |
+| `QWEN_E2E` | Set to `1` with `E2E_AGENT=qwen` to run live Qwen Code lifecycle tests |
+| `HERMES_E2E` | Set to `1` with `E2E_AGENT=hermes` and an explicit disposable `HERMES_HOME` to run live Hermes lifecycle tests |
 
 ## Repository Layout
 
@@ -139,6 +197,10 @@ agents/                          # Standalone external agent projects
   entire-agent-amp/              # Amp agent (Go binary)
   entire-agent-langgraph/        # LangGraph callback bridge (Python wrapper)
   entire-agent-crewai/           # CrewAI listener bridge (Python wrapper)
+  entire-agent-qwen/             # Qwen Code agent (Go binary)
+  entire-agent-omp/              # Oh My Pi agent (Go binary)
+  entire-agent-kilo/             # Kilo agent (Go binary)
+  entire-agent-hermes/           # Hermes Agent (Go binary + embedded observer plugin)
 e2e/                             # Lifecycle integration harness
 .github/workflows/               # CI, including protocol compliance via external-agents-tests
 .claude/skills/entire-external-agent/  # Skill files (research, test-writer, implementer)

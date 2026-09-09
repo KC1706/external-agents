@@ -20,7 +20,7 @@ func BinPath() string {
 	return "entire"
 }
 
-// RewindPoint represents a single entry from `entire rewind --list`.
+// RewindPoint represents a single entry from `entire checkpoint rewind --list`.
 type RewindPoint struct {
 	ID             string `json:"id"`
 	Message        string `json:"message"`
@@ -48,8 +48,15 @@ func RewindList(t *testing.T, dir string) []RewindPoint {
 	t.Helper()
 	out := run(t, dir, "checkpoint", "rewind", "--list")
 
+	// Newer entire versions print a deprecation notice for `rewind` ahead of
+	// the JSON; parse from the start of the array.
+	jsonOut := out
+	if idx := strings.Index(out, "["); idx > 0 {
+		jsonOut = out[idx:]
+	}
+
 	var points []RewindPoint
-	if err := json.Unmarshal([]byte(out), &points); err != nil {
+	if err := json.Unmarshal([]byte(jsonOut), &points); err != nil {
 		t.Fatalf("parse rewind list: %v\nraw output: %s", err, out)
 	}
 	return points
