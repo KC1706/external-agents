@@ -68,6 +68,29 @@ class SessionTests(unittest.TestCase):
         self.assertNotIn("native_data", metadata)
         self.assertEqual(base64.b64decode(self.read()["native_data"]), self.original)
 
+    def test_invalid_native_data_preserves_existing_session(self):
+        self.restore()
+        sidecar = self.path.with_suffix(".jsonl.session.json")
+        saved_metadata = sidecar.read_bytes()
+        for invalid in ("YWJj!!!!", "abc", "é", "YWJj\n", [97, 98, 99], {"text": "abc"}, 123, False):
+            with self.subTest(native_data=invalid):
+                with self.assertRaises(subprocess.CalledProcessError) as error:
+                    self.command("write-session", {
+                        "session_ref": str(self.path), "native_data": invalid,
+                    })
+                self.assertIn("native_data", error.exception.stderr)
+                self.assertEqual(self.path.read_bytes(), self.original)
+                self.assertEqual(sidecar.read_bytes(), saved_metadata)
+
+    def test_valid_base64_preserves_arbitrary_bytes(self):
+        data = bytes(range(256))
+        self.command("write-session", {
+            "session_ref": str(self.path),
+            "native_data": base64.b64encode(data).decode("ascii"),
+        })
+        self.assertEqual(self.path.read_bytes(), data)
+        self.assertEqual(base64.b64decode(self.read()["native_data"]), data)
+
     def test_absent_native_data_preserves_existing_session(self):
         self.restore()
         sidecar = self.path.with_suffix(".jsonl.session.json")

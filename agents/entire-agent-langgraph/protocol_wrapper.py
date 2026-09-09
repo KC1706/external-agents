@@ -35,16 +35,12 @@ def read_json() -> dict[str, Any]:
 
 
 def decode_native(value: Any) -> bytes:
-    if value in (None, ""):
-        return b""
-    if isinstance(value, str):
-        try:
-            return base64.b64decode(value)
-        except Exception:
-            return value.encode("utf-8")
-    if isinstance(value, list):
-        return bytes(value)
-    return json.dumps(value, separators=(",", ":")).encode("utf-8")
+    if not isinstance(value, str):
+        raise ValueError("native_data must be a base64 string or null")
+    try:
+        return base64.b64decode(value, validate=True)
+    except ValueError as exc:
+        raise ValueError("native_data must be valid base64") from exc
 
 
 def handle_install(agent: str) -> int:
@@ -105,7 +101,11 @@ def handle_write_session() -> int:
     if payload.get("native_data") is None:
         return 0
 
-    data = decode_native(payload["native_data"])
+    try:
+        data = decode_native(payload["native_data"])
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     path = Path(session_ref)
     write_private(path, data)
 
