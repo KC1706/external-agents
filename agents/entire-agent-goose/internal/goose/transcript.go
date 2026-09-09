@@ -242,11 +242,11 @@ func (a *Agent) ExtractPrompts(sessionRef string, offset int) ([]string, error) 
 	}
 	prompts := []string{}
 	for _, msg := range messagesFromOffset(export, offset) {
-		if msg.Role != "user" {
+		if msg.Role != roleUser {
 			continue
 		}
 		for _, content := range msg.Content {
-			if content.Type == "text" && content.Text != "" {
+			if content.Type == contentTypeText && content.Text != "" {
 				prompts = append(prompts, content.Text)
 			}
 		}
@@ -281,7 +281,7 @@ func (a *Agent) CalculateTokens(data []byte, _ int) (protocol.TokenUsageResponse
 		OutputTokens: export.AccumulatedOutput,
 	}
 	for _, msg := range export.Conversation {
-		if msg.Role == "assistant" {
+		if msg.Role == roleAssistant {
 			usage.APICallCount++
 		}
 	}
@@ -311,7 +311,7 @@ func modifiedFilesFromExport(export *gooseExport, offset int) []string {
 	seen := map[string]bool{}
 	for _, msg := range messagesFromOffset(export, offset) {
 		for _, content := range msg.Content {
-			if content.Type != "toolRequest" || content.ToolCall == nil {
+			if content.Type != contentTypeToolRequest || content.ToolCall == nil {
 				continue
 			}
 			name := content.ToolCall.Value.Name

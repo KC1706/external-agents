@@ -11,7 +11,13 @@ import (
 	"time"
 )
 
-const contentTypeText = "text"
+const (
+	contentTypeText         = "text"
+	contentTypeToolRequest  = "toolRequest"
+	contentTypeToolResponse = "toolResponse"
+	roleUser                = "user"
+	roleAssistant           = "assistant"
+)
 
 // The materialized transcript is stored as JSONL: exactly one conversation
 // message per line, in order, with no header line. Entire scopes
@@ -133,7 +139,7 @@ func newTranscriptRecord(meta gooseSessionMeta, msg gooseMessage) transcriptReco
 	// Only "user" and "assistant" mean anything to normalizeKind; any other
 	// role stays unprojected, which drops the line — the same outcome
 	// compactTranscriptBytes gives it.
-	if msg.Role != "user" && msg.Role != "assistant" {
+	if msg.Role != roleUser && msg.Role != roleAssistant {
 		return record
 	}
 	record.Message = &wireMessage{
@@ -153,9 +159,9 @@ func wireContent(blocks []gooseContent) []any {
 		switch block.Type {
 		case contentTypeText:
 			if block.Text != "" {
-				out = append(out, wireTextBlock{Type: "text", Text: block.Text})
+				out = append(out, wireTextBlock{Type: contentTypeText, Text: block.Text})
 			}
-		case "toolRequest":
+		case contentTypeToolRequest:
 			if block.ToolCall == nil {
 				continue
 			}
@@ -165,7 +171,7 @@ func wireContent(blocks []gooseContent) []any {
 				Name:  block.ToolCall.Value.Name,
 				Input: decodeToolInput(block.ToolCall.Value.Arguments),
 			})
-		case "toolResponse":
+		case contentTypeToolResponse:
 			if block.ToolResult == nil {
 				continue
 			}
