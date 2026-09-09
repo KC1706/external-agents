@@ -57,7 +57,14 @@ jobs:
         run: |
           entire_bin_dir="$RUNNER_TEMP/hermes-entire-bin"
           mkdir -p "$entire_bin_dir"
-          GOBIN="$entire_bin_dir" go install github.com/entireio/cli/cmd/entire@8b77ad43132d18f7958825c9dcd26544ab8f5d92 # v0.9.0
+          # Use the published Linux x64 binary on ubuntu-latest rather than
+          # rebuilding the CLI and downloading its full Go dependency graph.
+          entire_archive="$RUNNER_TEMP/entire_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 --max-time 180 \
+            https://github.com/entireio/cli/releases/download/v0.9.0/entire_linux_amd64.tar.gz \
+            --output "$entire_archive"
+          printf '%s  %s\n' cd1e242500ffa6342730ae1daad603f57fcf94a0a7407ede0d4f835b5e9c28c3 "$entire_archive" | sha256sum --check --strict
+          tar -xzf "$entire_archive" -C "$entire_bin_dir" entire
           test -x "$entire_bin_dir/entire"
           echo "$entire_bin_dir" >> "$GITHUB_PATH"
 
