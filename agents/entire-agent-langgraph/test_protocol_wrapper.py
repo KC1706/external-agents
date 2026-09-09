@@ -2,6 +2,8 @@
 
 import base64
 import json
+import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -38,6 +40,33 @@ class SessionTests(unittest.TestCase):
         return self.command("read-session", {
             "session_id": "test-session", "session_ref": str(self.path),
         })
+
+    @unittest.skipUnless(os.name == "posix", "POSIX file permissions")
+    def test_restore_creates_private_files(self):
+        self.path.unlink()
+        old_umask = os.umask(0)
+        try:
+            self.restore()
+        finally:
+            os.umask(old_umask)
+        for path in (self.path, self.path.with_suffix(".jsonl.session.json")):
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX file permissions")
+    def test_restore_makes_existing_files_private(self):
+        self.restore()
+        paths = (self.path, self.path.with_suffix(".jsonl.session.json"))
+        for path in paths:
+            path.chmod(0o644)
+        self.restore()
+        for path in paths:
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+    def test_sidecar_does_not_duplicate_transcript(self):
+        self.restore()
+        metadata = json.loads(self.path.with_suffix(".jsonl.session.json").read_text())
+        self.assertNotIn("native_data", metadata)
+        self.assertEqual(base64.b64decode(self.read()["native_data"]), self.original)
 
     def test_absent_native_data_preserves_existing_session(self):
         self.restore()

@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,19 @@ def handle_are_installed(agent: str) -> int:
     return 0
 
 
+def write_private(path: Path, data: bytes) -> None:
+    # Replace instead of truncating: the complete new contents remain private
+    # even when the destination previously had permissive file permissions.
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
 def handle_write_session() -> int:
     payload = read_json()
     session_ref = payload.get("session_ref")
@@ -93,14 +107,12 @@ def handle_write_session() -> int:
 
     data = decode_native(payload["native_data"])
     path = Path(session_ref)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    write_private(path, data)
 
     metadata = dict(payload)
-    metadata["native_data"] = base64.b64encode(data).decode("ascii")
+    metadata.pop("native_data", None)
     sidecar = session_sidecar(session_ref)
-    sidecar.parent.mkdir(parents=True, exist_ok=True)
-    sidecar.write_text(json.dumps(metadata, separators=(",", ":")), encoding="utf-8")
+    write_private(sidecar, json.dumps(metadata, separators=(",", ":")).encode("utf-8"))
     return 0
 
 

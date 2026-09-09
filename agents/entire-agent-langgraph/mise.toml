@@ -4,27 +4,7 @@ run = """
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install 'entire-adapter[langgraph]==0.2.2'
-cat > entire-agent-langgraph <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT="__AGENT_ROOT__"
-PYTHON="$ROOT/.venv/bin/python"
-
-if [[ "${1:-}" == "__e2e_run_prompt" ]]; then
-  shift
-  exec "$PYTHON" "$ROOT/e2e_langgraph_fixture.py" "$@"
-fi
-
-exec "$PYTHON" "$ROOT/protocol_wrapper.py" langgraph "$@"
-EOF
-.venv/bin/python - <<'PY'
-from pathlib import Path
-path = Path("entire-agent-langgraph")
-text = path.read_text(encoding="utf-8")
-text = text.replace("__AGENT_ROOT__", str(Path.cwd()))
-path.write_text(text, encoding="utf-8")
-PY
-chmod +x entire-agent-langgraph
+.venv/bin/python build_launcher.py
 """
 
 [tasks.test]
