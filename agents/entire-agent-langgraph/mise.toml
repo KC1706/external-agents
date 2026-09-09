@@ -28,9 +28,10 @@ chmod +x entire-agent-langgraph
 """
 
 [tasks.test]
-description = "Run protocol smoke tests"
+description = "Run wrapper unit tests and protocol smoke tests"
 run = """
 mise run build
+.venv/bin/python -m unittest discover -s . -p 'test_*.py'
 ./entire-agent-langgraph info >/dev/null
 ./entire-agent-langgraph detect >/dev/null
 printf '%s' '{"session_id":"langgraph-smoke","user_prompt":"Smoke test","raw_data":{"framework":"langgraph","agent_label":"smoke"}}' | ./entire-agent-langgraph parse-hook --hook turn-start >/dev/null

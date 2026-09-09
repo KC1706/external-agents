@@ -85,7 +85,13 @@ def handle_write_session() -> int:
     if not session_ref:
         return 0
 
-    data = decode_native(payload.get("native_data"))
+    # A metadata-only session (including the adapter's fresh read response)
+    # has no transcript to restore. An explicit empty value still restores
+    # an empty transcript.
+    if payload.get("native_data") is None:
+        return 0
+
+    data = decode_native(payload["native_data"])
     path = Path(session_ref)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -105,6 +111,14 @@ def handle_read_session(agent: str, underlying: Path) -> int:
         sidecar = session_sidecar(session_ref)
         if sidecar.exists():
             metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+            # The adapter appends to the transcript without updating our
+            # sidecar. Only the live file is authoritative for native data.
+            try:
+                data = Path(session_ref).read_bytes()
+            except FileNotFoundError:
+                metadata["native_data"] = None
+            else:
+                metadata["native_data"] = base64.b64encode(data).decode("ascii")
             metadata.setdefault("agent_name", agent)
             metadata.setdefault("modified_files", [])
             metadata.setdefault("new_files", [])
