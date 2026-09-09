@@ -284,7 +284,6 @@ var errNotTranscriptJSONL = errors.New("not kiro transcript JSONL")
 // Iterate the bytes already in memory: the native payload plus its projection
 // can exceed Scanner's line limit even when the source message fits it.
 func decodeTranscriptJSONL(data []byte) (*kiroTranscript, error) {
-
 	t := &kiroTranscript{}
 	var cur *kiroHistoryEntry
 	curEntry := 0
