@@ -70,3 +70,37 @@ func TestInstallHooksResolvesEntireThroughPATH(t *testing.T) {
 		t.Fatalf("expected %d entire hooks, found %d", len(hookSpecs), found)
 	}
 }
+
+func TestInstallHooksMigratesExistingAbsoluteCommands(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("ENTIRE_REPO_ROOT", repo)
+	a := New()
+	if _, err := a.InstallHooks(false, false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(repo, ".qwen", "settings.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Model a settings file written by the previous installer.
+	data = []byte(strings.ReplaceAll(string(data), "command -v entire ", "command -v /old/machine/entire "))
+	data = []byte(strings.ReplaceAll(string(data), "then entire hooks", "then /old/machine/entire hooks"))
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.InstallHooks(false, false); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(updated), "/old/machine/entire") {
+		t.Fatal("existing absolute commands were not migrated")
+	}
+	count, err := a.InstallHooks(false, false)
+	if err != nil || count != 0 {
+		t.Fatalf("reinstall count = %d, err = %v", count, err)
+	}
+}

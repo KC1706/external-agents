@@ -388,8 +388,9 @@ func upsertHook(matchers []qwenHookMatcher, matcher string, entryName string, co
 		if matchers[i].Matcher == matcher {
 			for j := range matchers[i].Hooks {
 				if isEntireHook(matchers[i].Hooks[j]) && matchers[i].Hooks[j].Name == entryName {
+					changed := matchers[i].Hooks[j].Command != command
 					matchers[i].Hooks[j] = entireHookEntry(entryName, command)
-					return matchers, false
+					return matchers, changed
 				}
 			}
 			matchers[i].Hooks = append(matchers[i].Hooks, entireHookEntry(entryName, command))
