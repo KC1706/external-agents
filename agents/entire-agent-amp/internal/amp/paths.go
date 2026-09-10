@@ -11,12 +11,10 @@ func (a *Agent) GetSessionDir(repoPath string) (string, error) {
 	return protocol.DefaultSessionDir(repoPath), nil
 }
 
-// safePathSessionID strips every character that could move a session file
-// out of its session directory (path separators, "..", control characters).
-// An empty result falls back to "unknown" so callers always get a real
-// filename. This mirrors the sanitization already applied to amp's
-// transcriptPath in hooks.go, so both write paths now share the same
-// defensive contract.
+// safePathSessionID replaces runs outside A-Za-z0-9_.- with an underscore
+// and maps an empty ID to "unknown". Dots are preserved; ResolveSessionFile
+// appends .json so even "." and ".." become filenames rather than path segments.
+// This matches the sanitization used by transcriptPath in hooks.go.
 func safePathSessionID(sessionID string) string {
 	if sessionID == "" {
 		return "unknown"
