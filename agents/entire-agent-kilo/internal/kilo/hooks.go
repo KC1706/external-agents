@@ -232,9 +232,13 @@ func (a *Agent) InstallHooks(localDev bool, force bool) (int, error) {
 
 	path := filepath.Join(root, pluginFile)
 	if info, lstatErr := os.Lstat(path); lstatErr == nil {
-		// Never follow an existing symlink or overwrite a non-regular path. A
-		// forced install replaces the directory entry atomically rather than
-		// writing through it.
+		// Replacing a directory would require deleting potentially user-owned
+		// data. Force only permits replacing other directory entries.
+		if info.IsDir() {
+			return 0, fmt.Errorf("refusing to replace kilo plugin directory %s; move or remove the directory before installing", path)
+		}
+		// A forced install replaces symlinks and other non-regular entries
+		// atomically rather than writing through them.
 		if !info.Mode().IsRegular() {
 			if !force {
 				return 0, fmt.Errorf("refusing to overwrite non-regular kilo plugin %s; pass force to replace it", path)
@@ -313,13 +317,8 @@ func isOwnedPlugin(data []byte) bool {
 }
 
 func (a *Agent) AreHooksInstalled() bool {
-	// Kilo skips loading external plugins in pure mode. A generated plugin file
-	// may still exist, but it is not active in that mode, so reporting hooks as
-	// installed would make Entire believe lifecycle events are being emitted.
-	if strings.TrimSpace(os.Getenv("KILO_PURE")) == "1" {
-		return false
-	}
-
+	// Installation detection must include plugins disabled by KILO_PURE so
+	// Entire's uninstall sweep can still discover and remove them.
 	root := protocol.RepoRoot()
 	data, err := os.ReadFile(filepath.Join(root, pluginFile))
 	return err == nil && isOwnedPlugin(data)

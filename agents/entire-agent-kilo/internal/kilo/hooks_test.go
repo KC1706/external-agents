@@ -355,7 +355,7 @@ func TestUninstallHooksRemovesEmptyPluginDirectories(t *testing.T) {
 	}
 }
 
-func TestAreHooksInstalledHonorsKiloPure(t *testing.T) {
+func TestAreHooksInstalledAllowsUninstallInKiloPure(t *testing.T) {
 	repo := t.TempDir()
 	t.Setenv("ENTIRE_REPO_ROOT", repo)
 	a := New()
@@ -366,8 +366,14 @@ func TestAreHooksInstalledHonorsKiloPure(t *testing.T) {
 		t.Fatal("hooks should be installed outside pure mode")
 	}
 	t.Setenv("KILO_PURE", "1")
+	// Entire only uninstalls adapters that report installed hooks.
 	if a.AreHooksInstalled() {
-		t.Fatal("hooks should not be reported as installed in pure mode")
+		if err := a.UninstallHooks(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(repo, pluginFile)); !os.IsNotExist(err) {
+		t.Fatalf("owned plugin remains after uninstall in pure mode: %v", err)
 	}
 }
 
@@ -475,5 +481,34 @@ func TestSafeSessionID(t *testing.T) {
 		if got := safeSessionID(in); got != want {
 			t.Errorf("safeSessionID(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestInstallHooksRejectsDirectoryEvenWithForce(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		name := "without force"
+		if force {
+			name = "with force"
+		}
+		t.Run(name, func(t *testing.T) {
+			repo := t.TempDir()
+			t.Setenv("ENTIRE_REPO_ROOT", repo)
+			path := filepath.Join(repo, pluginFile)
+			if err := os.MkdirAll(path, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			child := filepath.Join(path, "keep.txt")
+			if err := os.WriteFile(child, []byte("user data"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			count, err := New().InstallHooks(false, force)
+			if err == nil || count != 0 || !strings.Contains(err.Error(), "move or remove the directory") {
+				t.Fatalf("count=%d err=%v, want explicit directory guidance", count, err)
+			}
+			data, err := os.ReadFile(child)
+			if err != nil || string(data) != "user data" {
+				t.Fatalf("directory contents changed: %q, %v", data, err)
+			}
+		})
 	}
 }
