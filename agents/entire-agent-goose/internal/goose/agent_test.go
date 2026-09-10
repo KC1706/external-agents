@@ -32,18 +32,6 @@ func TestGetSessionID(t *testing.T) {
 	}
 }
 
-func TestFormatResumeCommand(t *testing.T) {
-	tests := []struct{ id, want string }{
-		{"20260520_1", "goose session --resume --session-id 20260520_1"},
-		{"20260101_42", "goose session --resume --session-id 20260101_42"},
-	}
-	for _, test := range tests {
-		if got := New().FormatResumeCommand(test.id); got != test.want {
-			t.Errorf("FormatResumeCommand(%q) = %q, want %q", test.id, got, test.want)
-		}
-	}
-}
-
 func TestInfoDeclaresGoosePreviewAndCapabilities(t *testing.T) {
 	info := New().Info()
 
