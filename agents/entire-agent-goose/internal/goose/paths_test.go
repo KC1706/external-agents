@@ -25,18 +25,15 @@ func TestResolveSessionFileRefusesPathTraversal(t *testing.T) {
 		"id\x00.json",
 	} {
 		got := New().ResolveSessionFile(sessionDir, id)
-		if filepath.Dir(got) != sessionDir {
-			t.Fatalf("ResolveSessionFile(%q) = %q places file outside session dir %q", id, got, sessionDir)
-		}
-		if filepath.Ext(got) != ".json" {
-			t.Fatalf("ResolveSessionFile(%q) = %q missing .json extension", id, got)
+		if got != "" {
+			t.Fatalf("ResolveSessionFile(%q) = %q, want rejection", id, got)
 		}
 	}
 }
 
-func TestResolveSessionFileEmptyFallback(t *testing.T) {
+func TestResolveSessionFileRejectsEmpty(t *testing.T) {
 	sessionDir := filepath.Join(t.TempDir(), "sessions")
-	want := filepath.Join(sessionDir, "unknown.json")
+	want := ""
 
 	if got := New().ResolveSessionFile(sessionDir, ""); got != want {
 		t.Fatalf("ResolveSessionFile(empty) = %q, want %q", got, want)
@@ -46,7 +43,6 @@ func TestResolveSessionFileEmptyFallback(t *testing.T) {
 func TestTranscriptPathRefusesPathTraversal(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("GOOSE_PATH_ROOT", root)
-	wantDir := filepath.Join(root, "data", "sessions")
 	for _, id := range []string{
 		"../etc/passwd",
 		"subdir/../../etc/passwd",
@@ -54,20 +50,16 @@ func TestTranscriptPathRefusesPathTraversal(t *testing.T) {
 		"id\x00.json",
 	} {
 		got := transcriptPath(id)
-		if filepath.Dir(got) != wantDir {
-			t.Fatalf("transcriptPath(%q) = %q places file outside session dir %q", id, got, wantDir)
-		}
-		if filepath.Ext(got) != ".json" {
-			t.Fatalf("transcriptPath(%q) = %q missing .json extension", id, got)
+		if got != "" {
+			t.Fatalf("transcriptPath(%q) = %q, want rejection", id, got)
 		}
 	}
 }
 
-func TestTranscriptPathEmptyFallback(t *testing.T) {
+func TestTranscriptPathRejectsEmpty(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("GOOSE_PATH_ROOT", root)
-	wantDir := filepath.Join(root, "data", "sessions")
-	if got := transcriptPath(""); got != filepath.Join(wantDir, "unknown.json") {
-		t.Fatalf("transcriptPath(empty) = %q, want %q", got, filepath.Join(wantDir, "unknown.json"))
+	if got := transcriptPath(""); got != "" {
+		t.Fatalf("transcriptPath(empty) = %q, want rejection", got)
 	}
 }

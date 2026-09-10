@@ -3,7 +3,7 @@ package goose
 import (
 	"os"
 	"path/filepath"
-	"regexp"
+	"strings"
 )
 
 // Goose stores sessions in a SQLite database (sessions.db) inside its data
@@ -36,22 +36,11 @@ func (a *Agent) GetSessionDir(_ string) (string, error) {
 	return filepath.Join(dataHome, "goose", "sessions"), nil
 }
 
-// safePathSessionID strips every character that could move a session file
-// out of its session directory (path separators, "..", control characters).
-// An empty result falls back to "unknown" so callers always get a real
-// filename. Goose session names are YYYYMMDD_N, which the sanitizer leaves
-// untouched.
-func safePathSessionID(sessionID string) string {
-	if sessionID == "" {
-		return "unknown"
-	}
-	return sessionIDPathSanitizer.ReplaceAllString(sessionID, "_")
-}
-
-var sessionIDPathSanitizer = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
-
 func (a *Agent) ResolveSessionFile(sessionDirPath, sessionID string) string {
-	return filepath.Join(sessionDirPath, safePathSessionID(sessionID)+".json")
+	if !validSessionID(sessionID) {
+		return ""
+	}
+	return filepath.Join(sessionDirPath, sessionID+".json")
 }
 
 // transcriptPath is the materialized export location for a session.
@@ -61,5 +50,12 @@ func transcriptPath(sessionID string) string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, safePathSessionID(sessionID)+".json")
+	return a.ResolveSessionFile(dir, sessionID)
+}
+
+// Session IDs are opaque identifiers, never paths. Reject both platform
+// separators so hook payloads cannot redirect exports outside session storage.
+func validSessionID(id string) bool {
+	return strings.TrimSpace(id) != "" && id != "." && id != ".." &&
+		!strings.ContainsAny(id, "/\\\x00:")
 }
