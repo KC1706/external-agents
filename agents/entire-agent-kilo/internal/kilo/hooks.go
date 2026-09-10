@@ -278,9 +278,9 @@ func (a *Agent) UninstallHooks() error {
 	root := protocol.RepoRoot()
 	path := filepath.Join(root, pluginFile)
 
-	// Leave user-owned, symlinked, or otherwise non-regular Kilo plugins
-	// untouched; uninstall only removes a regular Entire-generated plugin.
-	info, err := os.Lstat(path)
+	// Stat follows links only to inspect ownership of regular-file targets.
+	// Remove below unlinks path itself, preserving any symlink target.
+	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return nil
 	}
@@ -320,7 +320,12 @@ func (a *Agent) AreHooksInstalled() bool {
 	// Installation detection must include plugins disabled by KILO_PURE so
 	// Entire's uninstall sweep can still discover and remove them.
 	root := protocol.RepoRoot()
-	data, err := os.ReadFile(filepath.Join(root, pluginFile))
+	path := filepath.Join(root, pluginFile)
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	data, err := os.ReadFile(path)
 	return err == nil && isOwnedPlugin(data)
 }
 

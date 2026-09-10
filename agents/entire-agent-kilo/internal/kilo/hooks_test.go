@@ -512,3 +512,55 @@ func TestInstallHooksRejectsDirectoryEvenWithForce(t *testing.T) {
 		})
 	}
 }
+
+func TestUninstallHooksHandlesPluginSymlinks(t *testing.T) {
+	for _, kind := range []string{"owned", "foreign", "dangling"} {
+		t.Run(kind, func(t *testing.T) {
+			repo := t.TempDir()
+			t.Setenv("ENTIRE_REPO_ROOT", repo)
+			a := New()
+			path := filepath.Join(repo, pluginFile)
+			if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(t.TempDir(), "plugin.ts")
+			content := "// user plugin"
+			if kind == "owned" {
+				content = generatePlugin()
+			}
+			if kind != "dangling" {
+				if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Symlink(target, path); err != nil {
+				t.Fatal(err)
+			}
+			if got := a.AreHooksInstalled(); got != (kind == "owned") {
+				t.Fatalf("installed = %t for %s", got, kind)
+			}
+			if err := a.UninstallHooks(); err != nil {
+				t.Fatal(err)
+			}
+			_, err := os.Lstat(path)
+			if kind == "owned" {
+				if !os.IsNotExist(err) {
+					t.Fatalf("owned link remains: %v", err)
+				}
+				if a.AreHooksInstalled() {
+					t.Fatal("hooks still installed")
+				}
+			} else if err != nil {
+				t.Fatalf("foreign or dangling link removed: %v", err)
+			}
+			data, err := os.ReadFile(target)
+			if kind == "dangling" {
+				if !os.IsNotExist(err) {
+					t.Fatalf("dangling target changed: %v", err)
+				}
+			} else if err != nil || string(data) != content {
+				t.Fatalf("target modified: %v", err)
+			}
+		})
+	}
+}
